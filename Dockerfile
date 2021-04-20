@@ -2,6 +2,9 @@
 
 FROM quay.io/erasche/docker-rstudio-notebook:19.09
 
+RUN apt-get -qq update && \
+    apt-get install --no-install-recommends -y libpng-dev
+
 ADD ./packages/bioconda.R /tmp/packages/bioconda.R
 ADD ./packages/other.R /tmp/packages/other.R
 
