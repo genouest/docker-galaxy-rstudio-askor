@@ -17,4 +17,6 @@ RUN rm -f /usr/local/lib/R/etc/Rprofile.site && \
 # preventing ANY execution
 COPY ./Rprofile.site /usr/local/lib/R/etc/Rprofile.site
 
+COPY ./AskoR_bootstrap.R /opt/AskoR_bootstrap.R
+
 EXPOSE 80
