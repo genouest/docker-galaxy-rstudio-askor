@@ -4,9 +4,9 @@ This is a customised flavor of https://github.com/hexylena/docker-rstudio-notebo
 
 Specific R packages are pre-installed.
 
-This image is primarily intented to be used as Galaxy Interactive Tool.
+This image can be used as a Galaxy Interactive Tool.
 
-## Installing it on a Galaxy instance
+## Installing it as a Galaxy Interactive Tool on a Galaxy instance
 
 First make sure your Galaxy instance is [configured to support Interactive Tools](https://training.galaxyproject.org/training-material/topics/admin/tutorials/interactive-tools/tutorial.html).
 
