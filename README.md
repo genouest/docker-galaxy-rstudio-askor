@@ -2,7 +2,7 @@
 
 [![Docker Repository on Quay](https://quay.io/repository/genouest/docker-galaxy-rstudio-askor/status "Docker Repository on Quay")](https://quay.io/repository/genouest/docker-galaxy-rstudio-askor)
 
-This is a customised flavor of https://github.com/hexylena/docker-rstudio-notebook dedicated to AskoR analyses.
+This is a customised flavor of https://github.com/hexylena/docker-rstudio-notebook dedicated to [AskoR](https://github.com/askomics/askoR) analyses.
 
 Specific R packages are pre-installed.
 
