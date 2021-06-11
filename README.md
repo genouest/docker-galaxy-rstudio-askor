@@ -16,7 +16,7 @@ Then you need to copy the [./interactivetool_rstudio_askor.xml](./interactivetoo
 
 Add this new tool to `$GALAXY_ROOT/config/tool_conf.xml`:
 
-```
+```xml
 <?xml version='1.0' encoding='utf-8'?>
 <toolbox monitor="true">
   [...]
