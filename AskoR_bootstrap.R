@@ -19,7 +19,7 @@
 Asko_start <- function(){
   # Loading libraries in silent mode (only error messages will be displayed)
   pkgs<-c("limma","statmod","edgeR","VennDiagram","RColorBrewer","UpSetR","grid","topGO","ggfortify","gghalves","tidyverse",
-          "Rgraphviz","ggplot2","ggrepel","gplots","stringr","optparse","goSTAG","Glimma","ComplexHeatmap","cowplot","circlize")
+          "Rgraphviz","ggplot2","ggrepel","gplots","stringr","optparse","goSTAG","Glimma","ComplexHeatmap","cowplot","circlize","corrplot")
   for(p in pkgs) suppressWarnings(suppressMessages(library(p, quietly=TRUE, character.only=TRUE, warn.conflicts=FALSE)))
 
   # Specify desired options in a list
@@ -72,6 +72,8 @@ Asko_start <- function(){
                           help="logFC in the summary table [default= %default]", metavar="logical"),
     optparse::make_option(c("--th_lfc"), type="double", default=0, dest="threshold_logFC",
                           help="logFC threshold [default= %default]", metavar="double"),
+    optparse::make_option("--CompleteHm", type="logical", default=FALSE, dest="CompleteHeatmap",
+                          help="generation of the normalized expression heatmap on ALL genes (TRUE/FALSE) [default= %default]", metavar="logical"),
     optparse::make_option("--fc", type="logical", default=TRUE, dest="FC",
                           help="FC in the summary table [default= %default]", metavar="logical"),
     optparse::make_option(c("--lcpm"), type="logical", default=FALSE, dest="logCPM",
@@ -898,12 +900,12 @@ GEnorm <- function(filtered_GE, asko_list, data_list, parameters){
     hr <- stats::hclust(d2, method = parameters$hclust, members = NULL)
     my_palette <- grDevices::colorRampPalette(c("green","black","red"), interpolate = "linear")
 
-    grDevices::png(paste0(image_dir,parameters$analysis_name,"_heatmap_meanCounts_per_condi.png"), width=sizeImg*1.5, height=sizeImg*1.25)
+    grDevices::png(paste0(image_dir,parameters$analysis_name,"_heatmap_CPMmean_per_condi.png"), width=sizeImg*1.5, height=sizeImg*1.25)
     graphics::par(oma=c(2,1,2,2))
     gplots::heatmap.2(tcountscale, Colv = stats::as.dendrogram(hc), Rowv = stats::as.dendrogram(hr), density.info="histogram",
                       trace = "none", dendrogram = "column", xlab = "Condition", col = my_palette, labRow = FALSE,
                       cexRow = 0.1, cexCol = 1.5, ColSideColors = unique(norm_GE$samples$color), margins = c(10,1),
-                      main = paste0("Mean count per condition\nGenes 1 to ",nrow(norm_GE)))
+                      main = paste0("CPM counts per condition (mean)\nGenes 1 to ",nrow(norm_GE)))
     grDevices::dev.off()
   }
 
@@ -964,6 +966,15 @@ GEcorr <- function(asko_norm, parameters){
   stats::heatmap(cormat, col=color, symm=TRUE, RowSideColors=as.character(asko_norm$samples$color),
                  ColSideColors=as.character(asko_norm$samples$color), main="")
   graphics::title("Sample Correlation Matrix", adj=0.5, outer=TRUE)
+  grDevices::dev.off()
+
+  corr<-stats::cor(edgeR::cpm(asko_norm, log=FALSE))
+  minCorr=min(corr)
+  maxCorr=max(corr)
+  grDevices::png(paste0(image_dir, parameters$analysis_name, "_correlogram.png"), width=sizeImg, height=sizeImg)
+  corrplot(corr, method="ellipse", type = "lower", tl.col = "black", tl.srt = 45, is.corr = FALSE, cl.lim=c(minCorr,maxCorr))
+  #corrplot.mixed(corr, lower = "number", upper = "ellipse", tl.col = "black",is.corr = FALSE, cl.lim=c(minCorr,maxCorr))
+  graphics::title("Sample Correlogram", adj=0.5)
   grDevices::dev.off()
 
   # MDS Plot
@@ -1468,7 +1479,7 @@ DEanalysis <- function(norm_GE, data_list, asko_list, parameters){
     if(parameters$glm=="qlf"){
       glm_test<-glmQLFTest(fit, contrast=contrast)
     }
-    sum[,colnames(contrast)]<-decideTestsDGE(glm_test, adjust.method = parameters$p_adj_method, lfc=parameters$threshold_logFC)
+    sum[,colnames(contrast)]<-decideTestsDGE(glm_test, adjust.method = parameters$p_adj_method, lfc=parameters$threshold_logFC, p.value=parameters$threshold_FDR)
     AskoStats(glm_test, fit, colnames(contrast), asko_list, normGEdisp, parameters)
 
     # display grahes (volcano or/and MD)
@@ -1488,7 +1499,7 @@ DEanalysis <- function(norm_GE, data_list, asko_list, parameters){
       if(parameters$glm=="qlf"){
         glm_test<-glmQLFTest(fit, contrast=data_list$contrast[,contrast])
       }
-      sum[,contrast]<-decideTestsDGE(glm_test, adjust.method = parameters$p_adj_method, lfc=parameters$threshold_logFC)
+      sum[,contrast]<-decideTestsDGE(glm_test, adjust.method = parameters$p_adj_method, lfc=parameters$threshold_logFC, p.value=parameters$threshold_FDR)
       AskoStats(glm_test, fit, contrast, asko_list, normGEdisp, parameters)
 
       # display grahes (volcano or/and MD)
@@ -1502,7 +1513,7 @@ DEanalysis <- function(norm_GE, data_list, asko_list, parameters){
   # Create summary file with annotations (if available) and contrast value for each gene
   #---------------------------------------------------------------------------------------
   cat("\nCreate Summary file\n\n")
-  sumFile<-paste0(study_dir,parameters$analysis_name,"_summary_DE.csv")
+  sumFile<-paste0(study_dir,"DEanalysis/",parameters$analysis_name,"_summary_DE.txt")
   if(is.null(data_list$annot)==FALSE)
   {
     rnames<-row.names(sum)                        # get Genes DE names
@@ -2157,6 +2168,42 @@ GOenrichment<-function(resDEG, data_list, parameters, list=NULL, title=NULL){
         }
 
       }
+
+
+      ## Bargraph in each GO cat separately (ratio, pval, and number of genes)
+      GoCoul="gray"
+
+      if (is.null(list) == FALSE){
+        GraphTitle = paste0("GO Enrichment for list\n",contrast, "\n (",length(which(geneList==1)), " annotated genes among ",length(geneSelected)," genes)")
+      }
+      else{
+        GraphTitle = paste0("GO Enrichment for contrast\n",contrast, "\n (",length(which(geneList==1)), " annotated genes among ",length(geneSelected)," genes)")
+      }
+
+      if(exists("TabSigCompl")==TRUE){
+        if(nrow(TabSigCompl[TabSigCompl$GO_cat==ontology,])>=1){
+          ggplot(TabSigCompl[TabSigCompl$GO_cat==ontology,], aes(x=stringr::str_wrap(Term, 55), y=Ratio,fill=-1*log10(as.numeric(statisticTest)))) +
+            coord_flip()+
+            geom_col()+
+            theme_classic()+
+            geom_text(aes(label=Significant), position=position_stack(0.5),color="white")+
+            scale_fill_gradient(name="-log10pval",low=GoCoul,high=paste0(GoCoul,"4"))+
+            scale_y_reverse()+
+            labs(title = GraphTitle, x="GOterm", y="Ratio Significant / Expected") +
+            scale_x_discrete(position = "top")+
+            theme(
+              axis.text.y = element_text(face="bold",size=10),
+              axis.text.x = element_text(face="bold",size=10),
+              axis.title.x=element_text(face="bold",size=12),
+              axis.title.y=element_blank(),
+              legend.title = element_text(size=12,face="bold"),
+              plot.title = element_text(face="bold",size=15),
+              legend.text = element_text(size=12),
+              panel.background = element_rect(colour = "black", size=0.5, fill=NA))
+          ggsave(filename=paste0(img_go_dir,contrast,"_",ontology,"_GOgraph.png"),width=10, height = 8)
+        }
+      }
+
     }
     TabCompl<-TabCompl[TabCompl$Significant > 0,]
     utils::write.table(TabCompl, file=paste0(img_go_dir, parameters$analysis_name, "_", contrast, "_Complet_GOenrichment.txt"), col.names=TRUE, row.names=FALSE, quote=FALSE, sep='\t')
@@ -3437,3 +3484,5 @@ GeneInfo_OnList<-function(list, resDEG, data, title, clustering=NULL, conditions
   dev.off()
 
 }
+
+
